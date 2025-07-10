@@ -33,5 +33,3 @@ jobs:
 
       - name: run container
         run: docker run -d -p 8000:8000 --name payment-service ${{ secrets.DOCKER_USERNAME }}/payment-service:latest
-
-
