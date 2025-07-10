@@ -7,7 +7,7 @@ app.use(morgan("dev"))
 app.use("/api/v1", require("./src/routes/user.routes"));
 app.use("/api/v1", require("./src/routes/order.routes"));
 app.get("/", (req, res) => {
-    res.send("WELCOME TO THE BASIC EXPRESS APP WITH AN HTTPS SERVER");
+    res.send("Especially");
 });
 
 app.get("/api/v1/health", (req, res) => {
