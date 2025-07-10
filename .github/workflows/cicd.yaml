@@ -49,10 +49,6 @@ jobs:
             docker inspect payment-service --format='{{.Config.Image}}' > $BACKUP_FILE 2>/dev/null || echo "none" > $BACKUP_FILE
             echo "📦 Backup image: $(cat $BACKUP_FILE)"
 
-            echo "🧹 Stopping/removing old containers..."
-            docker rm -f payment-service-new || true
-            docker rm -f payment-service || true
-
             echo "📥 Pulling latest image..."
             docker pull $IMAGE
 
