@@ -46,11 +46,10 @@ jobs:
             BACKUP_FILE="/tmp/payment-service-backup.txt"
 
             echo "🔎 Checking existing containers..."
-            # Save the current image (if exists) for rollback
             docker inspect payment-service --format='{{.Config.Image}}' > $BACKUP_FILE 2>/dev/null || echo "none" > $BACKUP_FILE
             echo "📦 Backup image: $(cat $BACKUP_FILE)"
 
-            echo "🧹 Cleaning up containers using port 8000..."
+            echo "🧹 Stopping/removing old containers..."
             docker rm -f payment-service-new || true
             docker rm -f payment-service || true
 
@@ -68,8 +67,8 @@ jobs:
             for i in {1..5}; do
               echo "🧪 Attempt $i..."
               if curl -kfs $HEALTH_URL > /dev/null; then
-                HEALTH_OK=true
                 echo "✅ Health check passed."
+                HEALTH_OK=true
                 break
               fi
               echo "❌ Health check failed. Retrying in 5s..."
@@ -104,6 +103,9 @@ jobs:
                 exit 1
               fi
             fi
+
+            echo "🧹 Cleaning up unused Docker images to save space..."
+            docker image prune -af || true
 
       - name: Deployment Status
         if: success()
