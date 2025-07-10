@@ -5,6 +5,7 @@ const morgan = require("morgan");
 
 app.use(morgan("dev"))
 app.use("/api/v1", require("./src/routes/user.routes"));
+app.use("/api/v1", require("./src/routes/order.routes"));
 app.get("/", (req, res) => {
     res.send("WELCOME TO THE BASIC EXPRESS APP WITH AN HTTPS SERVER");
 });
@@ -13,7 +14,7 @@ app.get("/api/v1/health", (req, res) => {
     res.send("OK");
 });
 
-stat= w
+
 // Health check endpoint
 app.get('/health', (req, res) => {
     res.status(200).json({ 
