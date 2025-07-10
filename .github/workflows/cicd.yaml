@@ -42,27 +42,40 @@ jobs:
             set -e
 
             IMAGE="${{ secrets.DOCKER_USERNAME }}/payment-service:latest"
-            HEALTH_URL="https://localhost:8000/api/v1/health"
+            HEALTH_URL_BASE="https://localhost" # Base URL for health check
+            APP_PORT=8000 # The permanent port for the application
+            TEMP_PORT=8001 # A temporary port for the new container during health check
+            HEALTH_PATH="/api/v1/health" # The specific health check endpoint
+            
             BACKUP_FILE="/tmp/payment-service-backup.txt"
 
             echo "🔎 Checking existing containers..."
+            # Capture current image of payment-service, if it exists
             docker inspect payment-service --format='{{.Config.Image}}' > $BACKUP_FILE 2>/dev/null || echo "none" > $BACKUP_FILE
             echo "📦 Backup image: $(cat $BACKUP_FILE)"
 
             echo "📥 Pulling latest image..."
             docker pull $IMAGE
 
-            echo "🚀 Starting new container as 'payment-service-new'..."
-            docker run -d -p 8000:8000 --name payment-service-new $IMAGE
+            # Stop and remove any temporary container from a previous failed run
+            echo "🗑️ Cleaning up any previous 'payment-service-new' container..."
+            docker stop payment-service-new 2>/dev/null || true
+            docker rm payment-service-new 2>/dev/null || true
+
+            # Run the new container on a TEMPORARY port for health checks
+            # This prevents port conflicts with the existing 'payment-service'
+            echo "🚀 Starting new container as 'payment-service-new' on port $TEMP_PORT..."
+            docker run -d -p $TEMP_PORT:$APP_PORT --name payment-service-new $IMAGE
 
             echo "⏳ Waiting 15 seconds for warm-up..."
             sleep 15
 
-            echo "🩺 Health check on $HEALTH_URL..."
+            NEW_CONTAINER_HEALTH_URL="${HEALTH_URL_BASE}:${TEMP_PORT}${HEALTH_PATH}"
+            echo "🩺 Health check on $NEW_CONTAINER_HEALTH_URL..."
             HEALTH_OK=false
             for i in {1..5}; do
               echo "🧪 Attempt $i..."
-              if curl -kfs $HEALTH_URL > /dev/null; then
+              if curl -kfs "$NEW_CONTAINER_HEALTH_URL" > /dev/null; then
                 echo "✅ Health check passed."
                 HEALTH_OK=true
                 break
@@ -72,13 +85,28 @@ jobs:
             done
 
             if [ "$HEALTH_OK" = true ]; then
-              echo "🎉 Promoting new container..."
-              docker rename payment-service-new payment-service
+              echo "🎉 New container healthy. Promoting..."
+
+              # Stop and remove the old container if it exists
+              if docker ps -a --format '{{.Names}}' | grep -q payment-service; then
+                echo "Stopping and removing existing 'payment-service'..."
+                docker stop payment-service
+                docker rm payment-service
+              fi
+
+              # Stop the temporary new container
+              echo "Stopping temporary 'payment-service-new'..."
+              docker stop payment-service-new
+
+              # Start the new container on the permanent port (8000) with the correct name
+              echo "Starting new container on permanent port $APP_PORT as 'payment-service'..."
+              docker run -d -p $APP_PORT:$APP_PORT --name payment-service $IMAGE
+
               echo "✅ Deployment complete!"
             else
               echo "🚨 Health check failed after retries. Initiating rollback..."
 
-              docker rm -f payment-service-new || true
+              docker rm -f payment-service-new || true # Clean up the failed new container
 
               BACKUP_IMAGE=$(cat $BACKUP_FILE)
               if [ "$BACKUP_IMAGE" = "none" ]; then
@@ -87,12 +115,17 @@ jobs:
               fi
 
               echo "🔁 Rolling back to $BACKUP_IMAGE..."
-              docker run -d -p 8000:8000 --name payment-service $BACKUP_IMAGE
+              # Ensure old container is stopped/removed before rolling back to it
+              docker stop payment-service 2>/dev/null || true
+              docker rm payment-service 2>/dev/null || true
+              docker run -d -p $APP_PORT:$APP_PORT --name payment-service $BACKUP_IMAGE
 
               echo "⏳ Waiting 10s for rollback app to warm up..."
               sleep 10
 
-              if curl -kfs $HEALTH_URL > /dev/null; then
+              # Health check for the rolled back container (now on the main port)
+              ROLLEDBACK_HEALTH_URL="${HEALTH_URL_BASE}:${APP_PORT}${HEALTH_PATH}"
+              if curl -kfs "$ROLLEDBACK_HEALTH_URL" > /dev/null; then
                 echo "✅ Rollback successful."
               else
                 echo "❌ Rollback also failed. Manual intervention required!"
