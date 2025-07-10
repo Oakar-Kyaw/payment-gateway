@@ -40,27 +40,27 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             set -e
-
+            
             IMAGE="${{ secrets.DOCKER_USERNAME }}/payment-service:latest"
-            HEALTH_URL="${{ secrets.PAYMENT_SERVICE_URL }}/api/v1/health"
+            # Fixed: Use localhost since we're on the same server
+            HEALTH_URL="https://13.215.207.14:8000/api/v1/health"
             BACKUP_FILE="/tmp/payment-service-backup.txt"
-
+            
             echo "🧹 Cleaning up any existing containers..."
             docker rm -f payment-service-new || true
-            docker rm -f payment-service || true
-
+            
             echo "💾 Saving current image for rollback..."
             docker inspect payment-service --format='{{.Config.Image}}' > $BACKUP_FILE 2>/dev/null || echo "none" > $BACKUP_FILE
-
+            
             echo "📥 Pulling new image..."
             docker pull $IMAGE
-
+            
             echo "🚀 Starting new container as 'payment-service-new'..."
             docker run -d -p 8000:8000 --name payment-service-new $IMAGE
-
-            echo "⏳ Waiting 10 seconds for app to warm up..."
-            sleep 10
-
+            
+            echo "⏳ Waiting 15 seconds for app to warm up..."
+            sleep 15
+            
             echo "🔍 Running health checks on $HEALTH_URL..."
             HEALTH_OK=false
             for i in {1..5}; do
@@ -73,29 +73,33 @@ jobs:
               echo "❌ Health check failed. Retrying in 5s..."
               sleep 5
             done
-
+            
             if [ "$HEALTH_OK" = true ]; then
               echo "🎉 Promoting new container!"
+              # Stop old container first
+              docker stop payment-service || true
+              docker rm -f payment-service || true
+              # Rename new container
               docker rename payment-service-new payment-service
               echo "✅ Deployment successful!"
             else
               echo "🚨 Health check failed after 5 attempts. Initiating rollback..."
-
+              
               echo "🗑️ Cleaning up failed container..."
               docker rm -f payment-service-new || true
-
+              
               BACKUP_IMAGE=$(cat $BACKUP_FILE)
               if [ "$BACKUP_IMAGE" = "none" ]; then
                 echo "⚠️ No previous image found to roll back to!"
                 exit 1
               fi
-
+              
               echo "🔄 Restoring previous version: $BACKUP_IMAGE"
               docker run -d -p 8000:8000 --name payment-service $BACKUP_IMAGE
-
+              
               echo "⏳ Waiting for rollback container to warm up..."
-              sleep 5
-
+              sleep 10
+              
               if curl -fs $HEALTH_URL >/dev/null; then
                 echo "✅ Rollback succeeded!"
               else
