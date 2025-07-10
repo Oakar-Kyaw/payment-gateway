@@ -107,6 +107,8 @@ jobs:
               echo "🚨 Health check failed after retries. Initiating rollback..."
 
               docker rm -f payment-service-new || true # Clean up the failed new container
+              # Exit with non-zero status to indicate failure
+              exit 1
             fi
 
             echo "🧹 Cleaning up unused Docker images to save space..."
