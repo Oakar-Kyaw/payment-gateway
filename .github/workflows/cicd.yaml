@@ -44,7 +44,7 @@ jobs:
             IMAGE="${{ secrets.DOCKER_USERNAME }}/payment-service:latest"
             # Fixed: Use localhost since we're on the same server
             # This works because the SSH script runs ON the EC2 server
-            HEALTH_URL="http://localhost:8000/api/v1/health"
+            HEALTH_URL="https://localhost:8000/api/v1/health"
             BACKUP_FILE="/tmp/payment-service-backup.txt"
             
             echo "🧹 Cleaning up any existing containers..."
@@ -66,7 +66,7 @@ jobs:
             HEALTH_OK=false
             for i in {1..5}; do
               echo "🔄 Attempt $i..."
-              if curl -fs $HEALTH_URL >/dev/null; then
+              if curl -k $HEALTH_URL >/dev/null; then
                 echo "✅ Health check passed!"
                 HEALTH_OK=true
                 break
@@ -101,7 +101,7 @@ jobs:
               echo "⏳ Waiting for rollback container to warm up..."
               sleep 10
               
-              if curl -fs $HEALTH_URL >/dev/null; then
+              if curl -k $HEALTH_URL >/dev/null; then
                 echo "✅ Rollback succeeded!"
               else
                 echo "❌ Rollback failed too! Manual intervention required!"
