@@ -9,7 +9,9 @@ app.get("/", (req, res) => {
     res.send("WELCOME TO THE BASIC EXPRESS APP WITH AN HTTPS SERVER");
 });
 
-selt = w
+app.get("/api/v1/health", (req, res) => {
+    res.send("WELCOME TO THE BASIC EXPRESS APP WITH AN HTTPS SERVER");
+});
 
 // Health check endpoint
 app.get('/health', (req, res) => {
