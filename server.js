@@ -14,7 +14,12 @@ app.get("/api/v1/health", (req, res) => {
     res.send("OK");
 });
 
-sd
+app.get("*", (req, res) => {
+    res.send({
+        success: false,
+        message: "This is not a valid endpoint",
+    });
+});
 // Health check endpoint
 app.get('/health', (req, res) => {
     res.status(200).json({ 
