@@ -104,7 +104,7 @@ jobs:
 
               echo "✅ Deployment complete!"
             else
-              echo "🚨 Health check failed after retries. Initiating rollback..."
+              echo "🚨 Health check failed after retries. Delete the new images"
 
               docker rm -f payment-service-new || true # Clean up the failed new container
               # Exit with non-zero status to indicate failure
