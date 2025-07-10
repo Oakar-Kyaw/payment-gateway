@@ -43,7 +43,8 @@ jobs:
             
             IMAGE="${{ secrets.DOCKER_USERNAME }}/payment-service:latest"
             # Fixed: Use localhost since we're on the same server
-            HEALTH_URL="https://13.215.207.14:8000/api/v1/health"
+            # This works because the SSH script runs ON the EC2 server
+            HEALTH_URL="http://localhost:8000/api/v1/health"
             BACKUP_FILE="/tmp/payment-service-backup.txt"
             
             echo "🧹 Cleaning up any existing containers..."
