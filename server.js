@@ -13,6 +13,7 @@ app.get("/api/v1/health", (req, res) => {
     res.send("OK");
 });
 
+stat= w
 // Health check endpoint
 app.get('/health', (req, res) => {
     res.status(200).json({ 
