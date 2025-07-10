@@ -107,31 +107,7 @@ jobs:
               echo "🚨 Health check failed after retries. Initiating rollback..."
 
               docker rm -f payment-service-new || true # Clean up the failed new container
-
-              BACKUP_IMAGE=$(cat $BACKUP_FILE)
-              if [ "$BACKUP_IMAGE" = "none" ]; then
-                echo "⚠️ No backup image found! Manual recovery needed."
-                exit 1
-              fi
-
-              echo "🔁 Rolling back to $BACKUP_IMAGE..."
-              # Ensure old container is stopped/removed before rolling back to it
-              docker stop payment-service 2>/dev/null || true
-              docker rm payment-service 2>/dev/null || true
-              docker run -d -p $APP_PORT:$APP_PORT --name payment-service $BACKUP_IMAGE
-
-              echo "⏳ Waiting 10s for rollback app to warm up..."
-              sleep 10
-
-              # Health check for the rolled back container (now on the main port)
-              ROLLEDBACK_HEALTH_URL="${HEALTH_URL_BASE}:${APP_PORT}${HEALTH_PATH}"
-              if curl -kfs "$ROLLEDBACK_HEALTH_URL" > /dev/null; then
-                echo "✅ Rollback successful."
-              else
-                echo "❌ Rollback also failed. Manual intervention required!"
-                exit 1
-              fi
-            fi
+              
 
             echo "🧹 Cleaning up unused Docker images to save space..."
             docker image prune -af || true

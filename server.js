@@ -14,7 +14,7 @@ app.get("/api/v1/health", (req, res) => {
     res.send("OK");
 });
 
-cd
+
 // Health check endpoint
 app.get('/health', (req, res) => {
     res.status(200).json({ 
