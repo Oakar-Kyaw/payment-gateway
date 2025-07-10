@@ -16,22 +16,22 @@ jobs:
         run: docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }}
 
       - name: build docker image
-        run: docker build -t ${{ secrets.DOCKER_USERNAME }}/payment-service:latest
+        run: docker build -t ${{ secrets.DOCKER_USERNAME }}/payment-service:latest .
       
       - name: push docker image
         run: docker push ${{ secrets.DOCKER_USERNAME }}/payment-service:latest
 
   deploy: 
     needs: build
-    runs-on: [payment-service]
+    runs-on: self-hosted
     steps:
-      name: pull image from docker hub
-      run: docker pull ${{ secrets.DOCKER_USERNAME }}/payment-service:latest
+      - name: pull image from docker hub
+        run: docker pull ${{ secrets.DOCKER_USERNAME }}/payment-service:latest
 
-      name: delete old container
-      run: docker rm -f payment-service
+      - name: delete old container
+        run: docker rm -f payment-service || true
 
-      name: run container
-      run: docker run -d -p 8000:8000 --name payment-service ${{ secrets.DOCKER_USERNAME }}/payment-service:latest
+      - name: run container
+        run: docker run -d -p 8000:8000 --name payment-service ${{ secrets.DOCKER_USERNAME }}/payment-service:latest
 
 
