@@ -9,7 +9,16 @@ app.get("/", (req, res) => {
     res.send("WELCOME TO THE BASIC EXPRESS APP WITH AN HTTPS SERVER");
 });
 
+// Health check endpoint
+app.get('/health', (req, res) => {
+    res.status(200).json({ 
+      status: 'healthy', 
+      timestamp: new Date(),
+      version: process.env.VERSION || '1.0.0'
+    });
+  });
 
+  
 https.createServer({
     key: fs.readFileSync("key.pem"),
     cert: fs.readFileSync("cert.pem")

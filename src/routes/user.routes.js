@@ -7,7 +7,7 @@ router.get('/users', (req, res) => {
       success: true,
       message: "User route",
       data: [{
-        name: "Oakar Kyaw",
+        name: "New Route for Oakar Kyaw",
       }]
     });
 }); 
