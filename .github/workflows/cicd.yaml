@@ -92,7 +92,7 @@ jobs:
             HEALTH_CHECK_PASSED=false
             for i in {1..5}; do
               echo "Attempt $i/5..."
-              if curl -f -s http://localhost:8000/api/v1/health >/dev/null 2>&1; then
+              if curl -f -s https://localhost:8000/api/v1/health >/dev/null 2>&1; then
                 echo "✅ Health check passed!"
                 HEALTH_CHECK_PASSED=true
                 break
@@ -130,7 +130,7 @@ jobs:
                     
                     # Quick health check on backup
                     sleep 10
-                    if curl -f -s http://localhost:8000/api/v1/health >/dev/null 2>&1; then
+                    if curl -f -s https://localhost:8000/api/v1/health >/dev/null 2>&1; then
                       echo "✅ Auto-rollback successful!"
                       echo "🔄 Restored to previous version: $BACKUP_VERSION"
                     else
