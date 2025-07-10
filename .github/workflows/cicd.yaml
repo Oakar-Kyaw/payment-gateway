@@ -52,6 +52,11 @@ jobs:
           script: |
             echo "🚀 Starting deployment with auto-rollback..."
             
+            # Clean up any existing temporary containers first
+            echo "🧹 Cleaning up existing temporary containers..."
+            docker stop payment-service-new 2>/dev/null || echo "No payment-service-new container to stop"
+            docker rm payment-service-new 2>/dev/null || echo "No payment-service-new container to remove"
+            
             # Pull new image
             echo "📥 Pulling latest Docker image..."
             if ! docker pull ${{ secrets.DOCKER_USERNAME }}/payment-service:latest; then
@@ -65,10 +70,18 @@ jobs:
             
             # Start new container with temporary name
             echo "🆕 Starting new container..."
-            docker run -d \
+            if ! docker run -d \
               -p 8000:8000 \
               --name payment-service-new \
-              ${{ secrets.DOCKER_USERNAME }}/payment-service:latest
+              ${{ secrets.DOCKER_USERNAME }}/payment-service:latest; then
+              echo "❌ Failed to start new container!"
+              # Restart the old container if it exists
+              if docker ps -a --filter name=payment-service --format "table {{.Names}}" | grep -q payment-service; then
+                echo "🔄 Restarting old container..."
+                docker start payment-service || echo "Failed to restart old container"
+              fi
+              exit 1
+            fi
             
             # Wait for container to start
             echo "⏳ Waiting for container to start..."
@@ -79,7 +92,7 @@ jobs:
             HEALTH_CHECK_PASSED=false
             for i in {1..5}; do
               echo "Attempt $i/5..."
-              if curl -k http://localhost:8000/api/v1/health 2>/dev/null; then
+              if curl -f -s http://localhost:8000/api/v1/health >/dev/null 2>&1; then
                 echo "✅ Health check passed!"
                 HEALTH_CHECK_PASSED=true
                 break
@@ -100,27 +113,36 @@ jobs:
               echo "❌ Health check failed after 5 attempts"
               
               # Stop and remove failed container
-              docker stop payment-service-new
-              docker rm payment-service-new
+              docker stop payment-service-new 2>/dev/null || echo "Container already stopped"
+              docker rm payment-service-new 2>/dev/null || echo "Container already removed"
               
               # Check if we have a backup version to restore
               if [ -f /tmp/payment-service-backup.txt ]; then
                 BACKUP_VERSION=$(cat /tmp/payment-service-backup.txt)
-                echo "🔄 Restoring backup version: $BACKUP_VERSION"
-                
-                # Start backup version
-                docker run -d \
-                  -p 8000:8000 \
-                  --name payment-service \
-                  $BACKUP_VERSION
-                
-                # Quick health check on backup
-                sleep 10
-                if curl -k http://localhost:8000/api/v1/health 2>/dev/null; then
-                  echo "✅ Auto-rollback successful!"
-                  echo "🔄 Restored to previous version: $BACKUP_VERSION"
+                if [ "$BACKUP_VERSION" != "No previous version" ] && [ -n "$BACKUP_VERSION" ]; then
+                  echo "🔄 Restoring backup version: $BACKUP_VERSION"
+                  
+                  # Start backup version
+                  if docker run -d \
+                    -p 8000:8000 \
+                    --name payment-service \
+                    $BACKUP_VERSION; then
+                    
+                    # Quick health check on backup
+                    sleep 10
+                    if curl -f -s http://localhost:8000/api/v1/health >/dev/null 2>&1; then
+                      echo "✅ Auto-rollback successful!"
+                      echo "🔄 Restored to previous version: $BACKUP_VERSION"
+                    else
+                      echo "❌ Auto-rollback health check failed! Manual intervention required!"
+                      exit 1
+                    fi
+                  else
+                    echo "❌ Failed to start backup version! Manual intervention required!"
+                    exit 1
+                  fi
                 else
-                  echo "❌ Auto-rollback failed! Manual intervention required!"
+                  echo "❌ No valid backup version found! Manual intervention required!"
                   exit 1
                 fi
               else
