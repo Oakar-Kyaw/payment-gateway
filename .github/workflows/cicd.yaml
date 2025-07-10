@@ -40,71 +40,67 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             set -e
-            
+
             IMAGE="${{ secrets.DOCKER_USERNAME }}/payment-service:latest"
-            # Fixed: Use localhost since we're on the same server
-            # This works because the SSH script runs ON the EC2 server
             HEALTH_URL="https://localhost:8000/api/v1/health"
             BACKUP_FILE="/tmp/payment-service-backup.txt"
-            
-            echo "🧹 Cleaning up any existing containers..."
-            docker rm -f payment-service-new || true
-            
-            echo "💾 Saving current image for rollback..."
+
+            echo "🔎 Checking existing containers..."
+            # Save the current image (if exists) for rollback
             docker inspect payment-service --format='{{.Config.Image}}' > $BACKUP_FILE 2>/dev/null || echo "none" > $BACKUP_FILE
-            
-            echo "📥 Pulling new image..."
+            echo "📦 Backup image: $(cat $BACKUP_FILE)"
+
+            echo "🧹 Cleaning up containers using port 8000..."
+            docker rm -f payment-service-new || true
+            docker rm -f payment-service || true
+
+            echo "📥 Pulling latest image..."
             docker pull $IMAGE
-            
+
             echo "🚀 Starting new container as 'payment-service-new'..."
             docker run -d -p 8000:8000 --name payment-service-new $IMAGE
-            
-            echo "⏳ Waiting 15 seconds for app to warm up..."
+
+            echo "⏳ Waiting 15 seconds for warm-up..."
             sleep 15
-            
-            echo "🔍 Running health checks on $HEALTH_URL..."
+
+            echo "🩺 Health check on $HEALTH_URL..."
             HEALTH_OK=false
             for i in {1..5}; do
-              echo "🔄 Attempt $i..."
-              if curl -k $HEALTH_URL >/dev/null; then
-                echo "✅ Health check passed!"
+              echo "🧪 Attempt $i..."
+              if curl -kfs $HEALTH_URL > /dev/null; then
                 HEALTH_OK=true
+                echo "✅ Health check passed."
                 break
               fi
               echo "❌ Health check failed. Retrying in 5s..."
               sleep 5
             done
-            
+
             if [ "$HEALTH_OK" = true ]; then
-              echo "🎉 Promoting new container!"
-              # Stop old container first
-              docker stop payment-service || true
-              docker rm -f payment-service || true
-              # Rename new container
+              echo "🎉 Promoting new container..."
               docker rename payment-service-new payment-service
-              echo "✅ Deployment successful!"
+              echo "✅ Deployment complete!"
             else
-              echo "🚨 Health check failed after 5 attempts. Initiating rollback..."
-              
-              echo "🗑️ Cleaning up failed container..."
+              echo "🚨 Health check failed after retries. Initiating rollback..."
+
               docker rm -f payment-service-new || true
-              
+
               BACKUP_IMAGE=$(cat $BACKUP_FILE)
               if [ "$BACKUP_IMAGE" = "none" ]; then
-                echo "⚠️ No previous image found to roll back to!"
+                echo "⚠️ No backup image found! Manual recovery needed."
                 exit 1
               fi
-              
-              echo "🔄 Restoring previous version: $BACKUP_IMAGE"
+
+              echo "🔁 Rolling back to $BACKUP_IMAGE..."
               docker run -d -p 8000:8000 --name payment-service $BACKUP_IMAGE
-              
-              echo "⏳ Waiting for rollback container to warm up..."
+
+              echo "⏳ Waiting 10s for rollback app to warm up..."
               sleep 10
-              
-              if curl -k $HEALTH_URL >/dev/null; then
-                echo "✅ Rollback succeeded!"
+
+              if curl -kfs $HEALTH_URL > /dev/null; then
+                echo "✅ Rollback successful."
               else
-                echo "❌ Rollback failed too! Manual intervention required!"
+                echo "❌ Rollback also failed. Manual intervention required!"
                 exit 1
               fi
             fi
@@ -112,10 +108,10 @@ jobs:
       - name: Deployment Status
         if: success()
         run: |
-          echo "🎉 Deployment completed successfully or rollback succeeded!"
+          echo "🎉 Deployment or rollback succeeded!"
 
       - name: Deployment Failed
         if: failure()
         run: |
-          echo "💥 Deployment or rollback failed!"
+          echo "💥 Deployment and rollback failed!"
           echo "🚨 Manual intervention required. Check EC2 logs."
