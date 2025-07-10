@@ -9,6 +9,7 @@ app.get("/", (req, res) => {
     res.send("WELCOME TO THE BASIC EXPRESS APP WITH AN HTTPS SERVER");
 });
 
+app.get
 
 // Health check endpoint
 app.get('/health', (req, res) => {
