@@ -32,84 +32,112 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy with Auto-Rollback and Health Check
+      - name: Store current version for auto-rollback
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            set -e
+            # Store current running version before deployment
+            docker inspect payment-service --format='{{.Config.Image}}' > /tmp/payment-service-backup.txt 2>/dev/null || echo "No previous version"
+            echo "🔄 Backup version stored: $(cat /tmp/payment-service-backup.txt 2>/dev/null || echo 'None')"
 
-            IMAGE="${{ secrets.DOCKER_USERNAME }}/payment-service:latest"
-            HEALTH_URL="https://localhost:8000/api/v1/health"
-            BACKUP_FILE="/tmp/payment-service-backup.txt"
-
-            echo "🔎 Checking existing containers..."
-            docker inspect payment-service --format='{{.Config.Image}}' > $BACKUP_FILE 2>/dev/null || echo "none" > $BACKUP_FILE
-            echo "📦 Backup image: $(cat $BACKUP_FILE)"
-
-            echo "📥 Pulling latest image..."
-            docker pull $IMAGE
-
-            echo "🚀 Starting new container as 'payment-service-new'..."
-            docker run -d -p 8000:8000 --name payment-service-new $IMAGE
-
-            echo "⏳ Waiting 15 seconds for warm-up..."
+      - name: Deploy with Auto-Rollback
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            echo "🚀 Starting deployment with auto-rollback..."
+            
+            # Pull new image
+            echo "📥 Pulling latest Docker image..."
+            if ! docker pull ${{ secrets.DOCKER_USERNAME }}/payment-service:latest; then
+              echo "❌ Failed to pull new image!"
+              exit 1
+            fi
+            
+            # Stop current container (but don't remove yet)
+            echo "⏹️  Stopping current container..."
+            docker stop payment-service || echo "No existing container to stop"
+            
+            # Start new container with temporary name
+            echo "🆕 Starting new container..."
+            docker run -d \
+              -p 8000:8000 \
+              --name payment-service-new \
+              ${{ secrets.DOCKER_USERNAME }}/payment-service:latest
+            
+            # Wait for container to start
+            echo "⏳ Waiting for container to start..."
             sleep 15
-
-            echo "🩺 Health check on $HEALTH_URL..."
-            HEALTH_OK=false
+            
+            # Health check with multiple attempts
+            echo "🔍 Performing health check..."
+            HEALTH_CHECK_PASSED=false
             for i in {1..5}; do
-              echo "🧪 Attempt $i..."
-              if curl -kfs $HEALTH_URL > /dev/null; then
-                echo "✅ Health check passed."
-                HEALTH_OK=true
+              echo "Attempt $i/5..."
+              if curl -k http://localhost:8000/api/v1/health 2>/dev/null; then
+                echo "✅ Health check passed!"
+                HEALTH_CHECK_PASSED=true
                 break
               fi
-              echo "❌ Health check failed. Retrying in 5s..."
-              sleep 5
-            done
-
-            if [ "$HEALTH_OK" = true ]; then
-              echo "🎉 Promoting new container..."
-              docker rename payment-service-new payment-service
-              echo "✅ Deployment complete!"
-            else
-              echo "🚨 Health check failed after retries. Initiating rollback..."
-
-              docker rm -f payment-service-new || true
-
-              BACKUP_IMAGE=$(cat $BACKUP_FILE)
-              if [ "$BACKUP_IMAGE" = "none" ]; then
-                echo "⚠️ No backup image found! Manual recovery needed."
-                exit 1
-              fi
-
-              echo "🔁 Rolling back to $BACKUP_IMAGE..."
-              docker run -d -p 8000:8000 --name payment-service $BACKUP_IMAGE
-
-              echo "⏳ Waiting 10s for rollback app to warm up..."
+              echo "❌ Health check failed, retrying in 10 seconds..."
               sleep 10
-
-              if curl -kfs $HEALTH_URL > /dev/null; then
-                echo "✅ Rollback successful."
+            done
+            
+            if [ "$HEALTH_CHECK_PASSED" = true ]; then
+              echo "🎉 Deployment successful! Switching containers..."
+              # Remove old container and rename new one
+              docker rm -f payment-service || echo "No old container to remove"
+              docker rename payment-service-new payment-service
+              echo "✅ Deployment completed successfully!"
+              echo "📋 New version: ${{ github.sha }}"
+            else
+              echo "🚨 AUTO-ROLLBACK INITIATED!"
+              echo "❌ Health check failed after 5 attempts"
+              
+              # Stop and remove failed container
+              docker stop payment-service-new
+              docker rm payment-service-new
+              
+              # Check if we have a backup version to restore
+              if [ -f /tmp/payment-service-backup.txt ]; then
+                BACKUP_VERSION=$(cat /tmp/payment-service-backup.txt)
+                echo "🔄 Restoring backup version: $BACKUP_VERSION"
+                
+                # Start backup version
+                docker run -d \
+                  -p 8000:8000 \
+                  --name payment-service \
+                  $BACKUP_VERSION
+                
+                # Quick health check on backup
+                sleep 10
+                if curl -k http://localhost:8000/api/v1/health 2>/dev/null; then
+                  echo "✅ Auto-rollback successful!"
+                  echo "🔄 Restored to previous version: $BACKUP_VERSION"
+                else
+                  echo "❌ Auto-rollback failed! Manual intervention required!"
+                  exit 1
+                fi
               else
-                echo "❌ Rollback also failed. Manual intervention required!"
+                echo "❌ No backup version found! Manual intervention required!"
                 exit 1
               fi
             fi
 
-            echo "🧹 Cleaning up unused Docker images to save space..."
-            docker image prune -af || true
-
       - name: Deployment Status
         if: success()
         run: |
-          echo "🎉 Deployment or rollback succeeded!"
+          echo "🎉 Pipeline completed successfully!"
+          echo "📋 Status: Deployment successful or auto-rollback completed"
 
       - name: Deployment Failed
         if: failure()
         run: |
-          echo "💥 Deployment and rollback failed!"
-          echo "🚨 Manual intervention required. Check EC2 logs."
+          echo "💥 Pipeline failed!"
+          echo "🚨 Check the logs above for auto-rollback status"
+          echo "⚠️  Manual intervention may be required"
