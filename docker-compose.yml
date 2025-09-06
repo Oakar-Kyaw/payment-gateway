@@ -10,8 +10,10 @@ services:
       - app-network
 
   nginx:
-    image: nginx:latest
     container_name: nginx
+    build:
+      context: ./nginx/.
+      dockerfile: Dockerfile
     depends_on:
       - backend
     ports:
