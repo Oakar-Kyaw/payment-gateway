@@ -5,9 +5,18 @@ const http = require("http")
 const fs = require("fs");
 const morgan = require("morgan");
 
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  next();
+});
+
 app.use(morgan("dev"))
 app.use("/api/v1", require("./src/routes/user.routes"));
 app.use("/api/v1", require("./src/routes/order.routes"));
+
+
 
 app.get("/api/v1/health", (req, res) => {
     res.send("OK");
@@ -16,6 +25,7 @@ app.get("/api/v1/health", (req, res) => {
 app.all("/{*any}", (req, res) => {
     res.status(404).send("Not Found");
 });
+
   
 // https.createServer({
 //     key: fs.readFileSync("key.pem"),
