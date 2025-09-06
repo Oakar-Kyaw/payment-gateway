@@ -20,25 +20,18 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/default.conf:ro
-      # - certbot-etc:/etc/letsencrypt
-      # - certbot-var:/var/www/certbot
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
     networks:
       - app-network
 
-  # certbot:
-  #   image: certbot/certbot
-  #   container_name: certbot
-  #   depends_on:
-  #     - nginx
-  #   volumes:
-  #     - certbot-etc:/etc/letsencrypt
-  #     - certbot-var:/var/www/certbot
-  #   entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done;'"
-    
-# volumes:
-#   certbot-etc:
-#   certbot-var:
+  certbot:
+    image: certbot/certbot
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    command: certonly --webroot -w /var/www/certbot --email oakarkyaw@gmail.com -d testsupa.duckdns.org --agree-tos --no-eff-email
 
 networks:
   app-network:
