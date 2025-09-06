@@ -1,6 +1,7 @@
 "use strict"
 const app = require("express")()
-const https = require("https")
+// const https = require("https")
+const http = require("http")
 const fs = require("fs");
 const morgan = require("morgan");
 
@@ -16,9 +17,11 @@ app.all("/{*any}", (req, res) => {
     res.status(404).send("Not Found");
 });
   
-https.createServer({
-    key: fs.readFileSync("key.pem"),
-    cert: fs.readFileSync("cert.pem")
-}, app).listen(8000, () =>{
-    console.log("Https Server is running in port")
-})
+// https.createServer({
+//     key: fs.readFileSync("key.pem"),
+//     cert: fs.readFileSync("cert.pem")
+// }, app).listen(8000, () =>{
+//     console.log("Https Server is running in port")
+// })
+
+http.createServer(app).listen(8000, () =>  console.log("SErver is ", 8000))
